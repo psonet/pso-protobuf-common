@@ -1,0 +1,71 @@
+name: CI
+
+# PRs: buf format, lint, breaking-change check (commented on the PR).
+# Pushes to main: same checks, then push the module to the BSR (label
+# `main`), then let cocogitto bump the version from conventional commits;
+# if a tag is created, push the module again so the BSR carries the
+# `vX.Y.Z` label as well.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  buf:
+    name: Buf lint, breaking, push
+    runs-on: ubuntu-latest
+    if: "!startsWith(github.event.head_commit.message, 'chore(version):')"
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: bufbuild/buf-action@v1
+        with:
+          token: ${{ secrets.BUF_TOKEN }}
+
+  release:
+    name: Bump version & tag
+    runs-on: ubuntu-latest
+    needs: buf
+    if: github.event_name == 'push'
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # cog.toml's post_bump_hooks push the bump commit and tag.
+      - name: Cocogitto bump
+        uses: cocogitto/cocogitto-action@v4
+        with:
+          command: bump
+          args: --auto
+          git-user: "github-actions[bot]"
+          git-user-email: "41898282+github-actions[bot]@users.noreply.github.com"
+
+      # GITHUB_TOKEN pushes do not fire downstream workflows, so label the
+      # BSR module with the new tag from here.
+      - uses: bufbuild/buf-action@v1
+        with:
+          setup_only: true
+          token: ${{ secrets.BUF_TOKEN }}
+      - name: Buf push release label
+        run: |
+          set -euo pipefail
+          tag="$(git tag --points-at HEAD | grep '^v' | head -n1 || true)"
+          if [ -z "${tag}" ]; then
+            echo "No tag created — nothing to label."
+            exit 0
+          fi
+          buf push --git-metadata

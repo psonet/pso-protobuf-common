@@ -1,0 +1,96 @@
+syntax = "proto3";
+
+package net.pso.common.v1;
+
+import "google/protobuf/descriptor.proto";
+
+option csharp_namespace = "Net.Pso.Common.V1";
+option go_package = "github.com/psonet/pso-protobuf-common/gen/go/net/pso/common/v1;commonv1";
+option java_multiple_files = true;
+option java_outer_classname = "ErrorsProto";
+option java_package = "net.pso.common.v1";
+
+// gRPC status codes used across PSO APIs.
+// Values match the standard google.rpc.Code enum.
+enum GrpcStatusCode {
+  GRPC_STATUS_CODE_UNSPECIFIED = 0;
+  GRPC_STATUS_CODE_INVALID_ARGUMENT = 3;
+  GRPC_STATUS_CODE_NOT_FOUND = 5;
+  GRPC_STATUS_CODE_ALREADY_EXISTS = 6;
+  GRPC_STATUS_CODE_PERMISSION_DENIED = 7;
+  GRPC_STATUS_CODE_RESOURCE_EXHAUSTED = 8;
+  GRPC_STATUS_CODE_FAILED_PRECONDITION = 9;
+  GRPC_STATUS_CODE_ABORTED = 10;
+  GRPC_STATUS_CODE_UNIMPLEMENTED = 12;
+  GRPC_STATUS_CODE_INTERNAL = 13;
+  // The operation could not be served now but may succeed on a retry.
+  GRPC_STATUS_CODE_UNAVAILABLE = 14;
+  GRPC_STATUS_CODE_UNAUTHENTICATED = 16;
+}
+
+// Error category codes for OperationError.
+enum OperationErrorCode {
+  OPERATION_ERROR_CODE_UNSPECIFIED = 0;
+  // Custom domain error — inspect the typed detail in google.rpc.Status.details.
+  OPERATION_ERROR_CODE_CUSTOM = 1;
+  // Request validation error (maps to gRPC INVALID_ARGUMENT).
+  OPERATION_ERROR_CODE_INVALID_INPUT = 2;
+  // Unexpected server error (maps to gRPC INTERNAL).
+  OPERATION_ERROR_CODE_SERVER_ERROR = 3;
+}
+
+// OperationError is the standard error metadata message for PSO gRPC services.
+//
+// It is packed into google.rpc.Status.details[0] as google.protobuf.Any.
+// If a typed error detail exists (a service-specific message annotated with
+// the `server_error` option), it is packed as a separate
+// google.rpc.Status.details[1] entry.
+//
+// Wire format in grpc-status-details-bin trailer:
+//   google.rpc.Status {
+//     code: <grpc_code>
+//     message: "<human-readable>"
+//     details: [
+//       Any { type_url: ".../OperationError", value: { error_code, is_retryable, grpc_status_code } },
+//       Any { type_url: ".../SomeTypedError", value: { ... } }  // optional typed detail
+//     ]
+//   }
+message OperationError {
+  // Error category code.
+  OperationErrorCode error_code = 10000;
+  // Whether the client may retry the same request.
+  bool is_retryable = 10001;
+  // The gRPC status code this error is returned with.
+  GrpcStatusCode grpc_status_code = 10002;
+}
+
+// Custom message option that annotates typed error messages with their
+// OperationError metadata (error category, retryability, gRPC status code).
+extend google.protobuf.MessageOptions {
+  optional OperationError server_error = 50000;
+}
+
+// Describes a single error that an RPC method can return.
+message MethodError {
+  // The gRPC status code this error is returned with.
+  GrpcStatusCode grpc_code = 1;
+  // Fully qualified proto message name of the typed error detail
+  // (e.g. "net.pso.sra.provider.common.v1.ConsentNotFoundError").
+  string error_type = 2;
+  // The OperationError metadata for this error (resolved from the message's
+  // server_error option), so clients know category and retryability without
+  // looking up the message option at runtime.
+  optional OperationError operation_error = 3;
+}
+
+// Collection of errors that an RPC method can return.
+message MethodErrors {
+  repeated MethodError errors = 1;
+}
+
+// Custom method option that declares which errors an RPC can return.
+// Clients can inspect this at code-generation time to build exhaustive
+// error handling.
+extend google.protobuf.MethodOptions {
+  optional MethodErrors method_errors = 50001;
+}

@@ -1,0 +1,14 @@
+tag_prefix = "v"
+branch_whitelist = ["main"]
+ignore_merge_commits = true
+generate_mono_repository_global_tag = false
+
+# Push the bump commit and its tag as soon as cog creates them.
+post_bump_hooks = [
+    "git push origin HEAD:main",
+    "git push origin v{{version}}",
+]
+
+[changelog]
+path = "CHANGELOG.md"
+authors = []
