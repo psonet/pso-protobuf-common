@@ -43,16 +43,20 @@ jobs:
       - name: Buf push
         run: buf push --git-metadata --label "${TAG}"
 
-      - uses: cocogitto/cocogitto-action@v4
+      - name: Changelog for the tag
+        id: changelog
+        uses: cocogitto/cocogitto-action@v4
         with:
-          install-only: true
+          command: changelog
+          args: --at ${{ inputs.tag || github.ref_name }}
 
       - name: GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NOTES: ${{ steps.changelog.outputs.stdout }}
         run: |
           set -euo pipefail
-          cog changelog --at "${TAG}" > notes.md
+          printf '%s\n' "${NOTES}" > notes.md
           if gh release view "${TAG}" >/dev/null 2>&1; then
             gh release edit "${TAG}" --notes-file notes.md
           else
