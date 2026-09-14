@@ -42,9 +42,9 @@ available from the BSR module page.
   every PR. Breaking changes require a new package version
   (`net.pso.common.v2`), not edits to `v1`.
 - On merge to `main`, [cocogitto](https://github.com/cocogitto/cocogitto)
-  bumps the version from the commit history, updates `CHANGELOG.md`, tags
-  `vX.Y.Z`, and CI pushes the module to the BSR labelled with both `main`
-  and the new tag.
+  bumps the version from the commit history, updates `CHANGELOG.md` and
+  tags `vX.Y.Z`. The release workflow then pushes the module to the BSR
+  labelled with the tag and creates a GitHub Release with the changelog.
 
 Local checks:
 

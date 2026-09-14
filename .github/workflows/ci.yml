@@ -1,10 +1,9 @@
 name: CI
 
 # PRs: buf format, lint, breaking-change check (commented on the PR).
-# Pushes to main: same checks, then push the module to the BSR (label
-# `main`), then let cocogitto bump the version from conventional commits;
-# if a tag is created, push the module again so the BSR carries the
-# `vX.Y.Z` label as well.
+# Pushes to main: same checks, push the module to the BSR under the `main`
+# label, then let cocogitto bump the version from conventional commits. If
+# a tag is created, release.yml is dispatched for it.
 
 on:
   push:
@@ -32,13 +31,15 @@ jobs:
         with:
           token: ${{ secrets.BUF_TOKEN }}
 
-  release:
+  tag:
     name: Bump version & tag
     runs-on: ubuntu-latest
     needs: buf
     if: github.event_name == 'push'
     permissions:
       contents: write
+      # Needed to dispatch release.yml with GITHUB_TOKEN.
+      actions: write
     steps:
       - uses: actions/checkout@v6
         with:
@@ -54,18 +55,17 @@ jobs:
           git-user: "github-actions[bot]"
           git-user-email: "41898282+github-actions[bot]@users.noreply.github.com"
 
-      # GITHUB_TOKEN pushes do not fire downstream workflows, so label the
-      # BSR module with the new tag from here.
-      - uses: bufbuild/buf-action@v1
-        with:
-          setup_only: true
-          token: ${{ secrets.BUF_TOKEN }}
-      - name: Buf push release label
+      # GITHUB_TOKEN-authored tag pushes do not fire `push` events, but
+      # workflow_dispatch is allowed.
+      - name: Trigger release workflow
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           tag="$(git tag --points-at HEAD | grep '^v' | head -n1 || true)"
           if [ -z "${tag}" ]; then
-            echo "No tag created — nothing to label."
+            echo "No tag created — skipping release dispatch."
             exit 0
           fi
-          buf push --git-metadata
+          echo "Dispatching release.yml for ${tag}."
+          gh workflow run release.yml --ref "${tag}" --field "tag=${tag}"

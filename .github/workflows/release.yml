@@ -1,0 +1,60 @@
+name: Release
+
+# Publishes a tagged version: pushes the module to the BSR labelled with the
+# tag and creates a GitHub Release with the cocogitto changelog for it.
+# Fires on manual tag pushes directly; ci.yml dispatches it for tags
+# created by the bot.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag name to release, e.g. "v1.2.3".
+        required: true
+        type: string
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Publish ${{ inputs.tag || github.ref_name }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+          fetch-depth: 0
+
+      - uses: bufbuild/buf-action@v1
+        with:
+          setup_only: true
+          token: ${{ secrets.BUF_TOKEN }}
+
+      - name: Buf push
+        run: buf push --git-metadata --label "${TAG}"
+
+      - uses: cocogitto/cocogitto-action@v4
+        with:
+          install-only: true
+
+      - name: GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          cog changelog --at "${TAG}" > notes.md
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            gh release edit "${TAG}" --notes-file notes.md
+          else
+            gh release create "${TAG}" --title "${TAG}" --notes-file notes.md
+          fi
